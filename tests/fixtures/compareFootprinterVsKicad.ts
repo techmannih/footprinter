@@ -17,13 +17,21 @@ type PcbSmtPad = {
 // --- Helpers to handle both pads & holes safely ---
 function getWidth(elm: PcbSmtPad | PcbPlatedHole): number {
   if ("width" in elm) return elm.width
+
   if (elm.shape === "circle") return elm.outer_diameter
+
+  if (elm.shape === "circular_hole_with_rect_pad")
+    return elm.rect_pad_width ?? 0
 
   return 0
 }
 function getHeight(elm: PcbSmtPad | PcbPlatedHole): number {
   if ("height" in elm) return elm.height
+
   if (elm.shape === "circle") return elm.outer_diameter
+
+  if (elm.shape === "circular_hole_with_rect_pad")
+    return elm.rect_pad_height ?? 0
 
   return 0
 }
@@ -34,6 +42,14 @@ function getArea(elm: PcbSmtPad | PcbPlatedHole): number {
     // Plated area = outer circle - inner circle (annular ring)
     return Math.PI * (outerRadius * outerRadius - innerRadius * innerRadius)
   }
+
+  if (elm.type === "pcb_plated_hole" && elm.shape === "circular_hole_with_rect_pad") {
+    const rectArea = (elm.rect_pad_width ?? 0) * (elm.rect_pad_height ?? 0)
+    const holeRadius = (elm.hole_diameter ?? 0) / 2
+    const holeArea = Math.PI * holeRadius * holeRadius
+    return Math.max(rectArea - holeArea, 0)
+  }
+
   return getWidth(elm) * getHeight(elm)
 }
 
@@ -206,17 +222,22 @@ export async function compareFootprinterVsKicad(
   let maxY = -Infinity
 
   for (const elm of [...fpCircuitJson, ...transformedKiCad]) {
-    if (
-      (elm.type === "pcb_smtpad" && elm.shape === "rect") ||
-      (elm.type === "pcb_plated_hole" && elm.shape === "circle")
-    ) {
-      const radiusX = getWidth(elm) / 2
-      const radiusY = getHeight(elm) / 2
-      minX = Math.min(minX, elm.x - radiusX)
-      maxX = Math.max(maxX, elm.x + radiusX)
-      minY = Math.min(minY, elm.y - radiusY)
-      maxY = Math.max(maxY, elm.y + radiusY)
-    }
+    const isFootprintElement =
+      elm.type === "pcb_smtpad" || elm.type === "pcb_plated_hole"
+
+    if (!isFootprintElement) continue
+
+    const width = getWidth(elm)
+    const height = getHeight(elm)
+
+    if (width === 0 || height === 0) continue
+
+    const radiusX = width / 2
+    const radiusY = height / 2
+    minX = Math.min(minX, elm.x - radiusX)
+    maxX = Math.max(maxX, elm.x + radiusX)
+    minY = Math.min(minY, elm.y - radiusY)
+    maxY = Math.max(maxY, elm.y + radiusY)
   }
 
   const midX = (minX + maxX) / 2

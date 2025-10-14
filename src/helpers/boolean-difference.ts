@@ -149,7 +149,8 @@ function elementToPolygon(element: FootprintElement): Flatten.Polygon | null {
         new Flatten.Point(element.x - halfWidth, element.y + halfHeight),
       ]
 
-      const rectPolygon = new Flatten.Polygon(rectPoints)
+      const polygon = new Flatten.Polygon()
+      const face = polygon.addFace(rectPoints)
 
       const holeRadius = element.hole_diameter / 2
       const holeOffsetX = element.hole_offset_x ?? 0
@@ -165,17 +166,20 @@ function elementToPolygon(element: FootprintElement): Flatten.Polygon | null {
           ),
         )
       }
-      const circlePolygon = new Flatten.Polygon(circlePoints)
+      // Close the circular path explicitly to avoid precision gaps when
+      // subtracting from the rectangular pad outline.
+      circlePoints.push(circlePoints[0]!)
 
       try {
-        return Flatten.BooleanOperations.subtract(rectPolygon, circlePolygon)
+        face.addHole(circlePoints)
       } catch (error) {
         console.warn(
-          "Boolean subtract failed for circular_hole_with_rect_pad:",
+          "Failed to add hole for circular_hole_with_rect_pad, falling back to solid rectangle:",
           error,
         )
-        return rectPolygon
       }
+
+      return polygon
     }
 
     if (

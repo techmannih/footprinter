@@ -19,6 +19,10 @@ interface FootprintElement {
   height?: number
   outer_diameter?: number
   hole_diameter?: number
+  rect_pad_width?: number
+  rect_pad_height?: number
+  hole_offset_x?: number
+  hole_offset_y?: number
   route?: Array<{ x: number; y: number }>
   points?: Array<{ x: number; y: number }>
   shape?: string
@@ -124,6 +128,54 @@ function elementToPolygon(element: FootprintElement): Flatten.Polygon | null {
       }
 
       return new Flatten.Polygon(ringPoints)
+    }
+
+    if (
+      element.type === "pcb_plated_hole" &&
+      element.shape === "circular_hole_with_rect_pad" &&
+      element.rect_pad_width &&
+      element.rect_pad_height &&
+      element.hole_diameter &&
+      element.x !== undefined &&
+      element.y !== undefined
+    ) {
+      const halfWidth = element.rect_pad_width / 2
+      const halfHeight = element.rect_pad_height / 2
+
+      const rectPoints = [
+        new Flatten.Point(element.x - halfWidth, element.y - halfHeight),
+        new Flatten.Point(element.x + halfWidth, element.y - halfHeight),
+        new Flatten.Point(element.x + halfWidth, element.y + halfHeight),
+        new Flatten.Point(element.x - halfWidth, element.y + halfHeight),
+      ]
+
+      const rectPolygon = new Flatten.Polygon(rectPoints)
+
+      const holeRadius = element.hole_diameter / 2
+      const holeOffsetX = element.hole_offset_x ?? 0
+      const holeOffsetY = element.hole_offset_y ?? 0
+      const numPoints = 64
+      const circlePoints: Flatten.Point[] = []
+      for (let i = 0; i < numPoints; i++) {
+        const angle = (i * Math.PI * 2) / numPoints
+        circlePoints.push(
+          new Flatten.Point(
+            element.x + holeOffsetX + holeRadius * Math.cos(angle),
+            element.y + holeOffsetY + holeRadius * Math.sin(angle),
+          ),
+        )
+      }
+      const circlePolygon = new Flatten.Polygon(circlePoints)
+
+      try {
+        return Flatten.BooleanOperations.subtract(rectPolygon, circlePolygon)
+      } catch (error) {
+        console.warn(
+          "Boolean subtract failed for circular_hole_with_rect_pad:",
+          error,
+        )
+        return rectPolygon
+      }
     }
 
     if (

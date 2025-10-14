@@ -465,7 +465,7 @@ export function createBooleanDifferenceVisualization(
         svg += `<circle cx="${centeredX}" cy="${centeredY}" r="${avgRadius}" fill="none" stroke="${colorA}" stroke-width="${strokeWidth}" opacity="0.8"/>`
       } else if (path) {
         // Regular pads with fill
-        svg += `<path d="${path}" fill="${colorA}" stroke="${colorA}" stroke-width="0.02" fill-opacity="0.6"/>`
+        svg += `<path d="${path}" fill="${colorA}" stroke="${colorA}" stroke-width="0.02" fill-opacity="0.6" fill-rule="evenodd"/>`
       }
     }
     svg += `</g>`
@@ -495,7 +495,7 @@ export function createBooleanDifferenceVisualization(
         svg += `<circle cx="${centeredX}" cy="${centeredY}" r="${avgRadius}" fill="none" stroke="${colorB}" stroke-width="${strokeWidth}" opacity="0.8"/>`
       } else if (path) {
         // Regular pads with fill
-        svg += `<path d="${path}" fill="${colorB}" stroke="${colorB}" stroke-width="0.02" fill-opacity="0.6"/>`
+        svg += `<path d="${path}" fill="${colorB}" stroke="${colorB}" stroke-width="0.02" fill-opacity="0.6" fill-rule="evenodd"/>`
       }
     }
     svg += `</g>`

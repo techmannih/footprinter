@@ -142,36 +142,32 @@ function elementToPolygon(element: FootprintElement): Flatten.Polygon | null {
       const halfWidth = element.rect_pad_width / 2
       const halfHeight = element.rect_pad_height / 2
 
-      const rectPoints = [
-        new Flatten.Point(element.x - halfWidth, element.y - halfHeight),
-        new Flatten.Point(element.x + halfWidth, element.y - halfHeight),
-        new Flatten.Point(element.x + halfWidth, element.y + halfHeight),
-        new Flatten.Point(element.x - halfWidth, element.y + halfHeight),
-      ]
-
-      const polygon = new Flatten.Polygon()
-      polygon.addFace(rectPoints)
+      const rectPolygon = new Flatten.Polygon([
+        [element.x - halfWidth, element.y - halfHeight],
+        [element.x + halfWidth, element.y - halfHeight],
+        [element.x + halfWidth, element.y + halfHeight],
+        [element.x - halfWidth, element.y + halfHeight],
+      ])
 
       const holeRadius = element.hole_diameter / 2
       const holeOffsetX = element.hole_offset_x ?? 0
       const holeOffsetY = element.hole_offset_y ?? 0
-      const numPoints = 64
-      const circlePoints: Flatten.Point[] = []
-      for (let i = 0; i < numPoints; i++) {
-        const angle = (i * Math.PI * 2) / numPoints
-        circlePoints.push(
-          new Flatten.Point(
-            element.x + holeOffsetX + holeRadius * Math.cos(angle),
-            element.y + holeOffsetY + holeRadius * Math.sin(angle),
-          ),
+      const drillCenter = new Flatten.Point(
+        element.x + holeOffsetX,
+        element.y + holeOffsetY,
+      )
+      const drillCircle = new Flatten.Circle(drillCenter, holeRadius)
+      const drillPolygon = new Flatten.Polygon(drillCircle)
+
+      try {
+        return Flatten.BooleanOperations.subtract(rectPolygon, drillPolygon)
+      } catch (error) {
+        console.warn(
+          "Failed to subtract circular drill from rectangular pad, returning solid rectangle:",
+          error,
         )
+        return rectPolygon
       }
-
-      // Add the drill as a clockwise face so Flatten treats it as a hole.
-      const circleHolePoints = circlePoints.slice().reverse()
-      polygon.addFace(circleHolePoints)
-
-      return polygon
     }
 
     if (
@@ -216,20 +212,43 @@ function polygonToSvgPath(polygon: Flatten.Polygon): string {
   }
 
   try {
-    // Use vertices directly for simple polygon path generation
-    const vertices = polygon.vertices
-    if (!vertices || vertices.length === 0) {
-      return ""
+    const directPath = polygon.dpath()
+    if (directPath && directPath.trim().length > 0) {
+      return directPath
     }
 
-    let pathData = `M ${vertices[0]!.x} ${vertices[0]!.y}`
+    const faces = [...polygon.faces]
+    if (faces.length === 0) return ""
 
-    for (let i = 1; i < vertices.length; i++) {
-      pathData += ` L ${vertices[i]!.x} ${vertices[i]!.y}`
+    const pathParts: string[] = []
+
+    for (const face of faces) {
+      const edges = [...face]
+      if (edges.length === 0) continue
+
+      const movePoint = edges[0]!.start
+      pathParts.push(`M ${movePoint.x} ${movePoint.y}`)
+
+      for (const edge of edges) {
+        const shape = edge.shape
+        if (shape instanceof Flatten.Segment) {
+          const end = shape.end
+          pathParts.push(`L ${end.x} ${end.y}`)
+        } else if (shape instanceof Flatten.Arc) {
+          const end = shape.end
+          const radius = shape.r
+          const largeArcFlag = Math.abs(shape.sweep) > Math.PI ? 1 : 0
+          const sweepFlag = shape.counterClockwise ? 1 : 0
+          pathParts.push(
+            `A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${end.x} ${end.y}`,
+          )
+        }
+      }
+
+      pathParts.push("Z")
     }
 
-    pathData += " Z"
-    return pathData
+    return pathParts.join(" ")
   } catch (error) {
     console.warn("Failed to convert polygon to SVG path:", error)
     return ""
@@ -302,19 +321,11 @@ export function createBooleanDifferenceVisualization(
     const centerBY = (bboxB.minY + bboxB.maxY) / 2
 
     // Translate polygons to center them at origin for overlay
-    const centeredPolygonsA = polygonsA.map((poly) => {
-      const translatedVertices = poly.vertices.map(
-        (v) => new Flatten.Point(v.x - centerAX, v.y - centerAY),
-      )
-      return new Flatten.Polygon(translatedVertices)
-    })
+    const translationA = new Flatten.Vector(-centerAX, -centerAY)
+    const centeredPolygonsA = polygonsA.map((poly) => poly.translate(translationA))
 
-    const centeredPolygonsB = polygonsB.map((poly) => {
-      const translatedVertices = poly.vertices.map(
-        (v) => new Flatten.Point(v.x - centerBX, v.y - centerBY),
-      )
-      return new Flatten.Polygon(translatedVertices)
-    })
+    const translationB = new Flatten.Vector(-centerBX, -centerBY)
+    const centeredPolygonsB = polygonsB.map((poly) => poly.translate(translationB))
 
     // Footprints are now centered and ready for boolean operations
 

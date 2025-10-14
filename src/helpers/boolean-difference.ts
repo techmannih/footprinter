@@ -212,7 +212,7 @@ function polygonToSvgPath(polygon: Flatten.Polygon): string {
   }
 
   try {
-    const directPath = polygon.dpath()
+    const directPath = (polygon as unknown as { dpath?: () => string }).dpath?.()
     if (directPath && directPath.trim().length > 0) {
       return directPath
     }

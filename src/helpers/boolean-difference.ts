@@ -150,7 +150,7 @@ function elementToPolygon(element: FootprintElement): Flatten.Polygon | null {
       ]
 
       const polygon = new Flatten.Polygon()
-      const face = polygon.addFace(rectPoints)
+      polygon.addFace(rectPoints)
 
       const holeRadius = element.hole_diameter / 2
       const holeOffsetX = element.hole_offset_x ?? 0
@@ -166,18 +166,10 @@ function elementToPolygon(element: FootprintElement): Flatten.Polygon | null {
           ),
         )
       }
-      // Close the circular path explicitly to avoid precision gaps when
-      // subtracting from the rectangular pad outline.
-      circlePoints.push(circlePoints[0]!)
 
-      try {
-        face.addHole(circlePoints)
-      } catch (error) {
-        console.warn(
-          "Failed to add hole for circular_hole_with_rect_pad, falling back to solid rectangle:",
-          error,
-        )
-      }
+      // Add the drill as a clockwise face so Flatten treats it as a hole.
+      const circleHolePoints = circlePoints.slice().reverse()
+      polygon.addFace(circleHolePoints)
 
       return polygon
     }
